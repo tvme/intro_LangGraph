@@ -1,0 +1,20 @@
+[project]
+name = "intro-langgraph"
+version = "0.1.0"
+description = "LangGraph Academia: Introduction to LangGraph"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph",
+    "langgraph-prebuilt",
+    "langgraph-sdk",
+    "langgraph-checkpoint-sqlite",
+    "langsmith",
+    "langchain-community",
+    "langchain-core",
+    "langchain-openai",
+    "tavily-python",
+    "wikipedia",
+    "trustcall",
+    "langgraph-cli[inmem]",
+]
