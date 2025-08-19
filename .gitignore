@@ -133,7 +133,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-lng-env/
 
 # Spyder project settings
 .spyderproject
@@ -218,4 +217,7 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+# special 
 module-6/deployment/docker-compose.yml
+**/.langgraph_api/
+module-1/studio/.langgraph_api/

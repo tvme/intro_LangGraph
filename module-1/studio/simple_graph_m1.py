@@ -28,11 +28,11 @@ def node_1(state: State) -> State:
 
 def node_2(state: State) -> State:
     print("----Node 2----")
-    return {"graph_state": state["graph_state"] + " happy!"}
+    return {"graph_state": state["graph_state"] + " very happy!"}
 
 def node_3(state: State) -> State:
     print("----Node 3----")
-    return {"graph_state": state["graph_state"] + " sad!"}
+    return {"graph_state": state["graph_state"] + " so sad!"}
 
 def decide_mood(state: State) -> Literal["node_2", "node_3"]:
     user_input = state["graph_state"]
