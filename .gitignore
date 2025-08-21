@@ -220,4 +220,3 @@ $RECYCLE.BIN/
 # special 
 module-6/deployment/docker-compose.yml
 **/.langgraph_api/
-module-1/studio/.langgraph_api/
