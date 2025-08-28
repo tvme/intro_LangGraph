@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+from typing_extensions import Literal
 import inspect
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
@@ -8,7 +9,7 @@ from langfuse import Langfuse
 from langfuse.langchain import CallbackHandler
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
+from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage, RemoveMessage
 from langgraph.graph import MessagesState
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -32,6 +33,8 @@ langfuse = Langfuse(
 )
 langfuse_handler = CallbackHandler()
 
+model = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+USER_THREAD = "a1"
 
 def ensure_database():
     # подключаемся к системной базе postgres
@@ -82,6 +85,7 @@ def ensure_schema():
                 print("Схема LangGraph уже готова.")
 
 def is_running_in_studio():
+
     """Определяет, запущен ли код в LangGraph Studio через стек вызовов"""
     try:
         # Получаем стек вызовов
@@ -103,88 +107,79 @@ def is_running_in_studio():
         print(f"Error detecting studio environment: {e}")
         # В случае ошибки предполагаем standalone режим
         return False
-    
-# ============ Tools ============
-def multiply(a: int, b: int) -> int:
-    """Multiplies a and b.
+    return False
 
-    Args:
-        a: first int
-        b: second int
-    """
-    return a * b
+class State(MessagesState):
+    summary: str
 
-def add(a: int, b: int) -> int:
-    """Adds a and b.
+# Define the logic to call the model
+def call_model(state: State):
+    summary = state.get("summary", "")
+    if summary:
+        system_msg = f"Summary of conversation earlier: {summary}"
+        messages = [SystemMessage(content=system_msg)] + state["messages"]
+    else:
+        messages = state["messages"]
+    response = model.invoke(messages)
+    return {"messages": response}
 
-    Args:
-        a: first int
-        b: second int
-    """
-    return a + b
+def summarize_conversation(state: State):
+    # Get existing summary
+    summary = state.get("summary", "")
+    if summary:
+        summary_message = (
+            f"This is summary of the conversation to date: {summary}\n\n"
+            "Extend the summary by taking into account the new messages above:"
+        )
+    else:
+        summary_message = "Create a summary of the conversation above:"
 
-def subtract(a: int, b: int) -> int:
-    """Subtracts b from a.
+    # Add prompt to our history
+    messages = state["messages"] + [HumanMessage(content=summary_message)]
+    response = model.invoke(messages)
 
-    Args:
-        a: first int
-        b: second int
-    """
-    return a - b
+    # Delete all but 2 most recent messages
+    if len(messages) > 2:
+        delete_messages = [RemoveMessage(id=m.id) for m in state["messages"][:-2]]
 
-def divide(a: int, b: int) -> float:
-    """Divides a by b.
+    return {"summary": response.content, "messages": delete_messages}
 
-    Args:
-        a: first int
-        b: second int
-    """
-    return a / b
+def should_continue_conversation(state: State) -> Literal["summarize_conversation", END]:
+    """Return the next node to execute."""
 
-tools = [multiply, add, subtract, divide]
-# LLM with bound tool
-llm = ChatOpenAI(model="gpt-4o-mini")
-llm_with_tools = llm.bind_tools(tools=tools)
+    messages = state.get("messages", [])
+    if len(messages) > 6:
+        # Check if the conversation should continue based on the state
+        return "summarize_conversation"
+    return END
 
-# System message
-sys_message = SystemMessage(content="You are a helpful assistant that can perform arithmetic operations using tools. You can multiply, add, subtract, and divide numbers. Use the tools when necessary.")
+workflow = StateGraph(State)
+workflow.add_node("conversation", call_model)
+workflow.add_node("summarize_conversation", summarize_conversation)
 
-# Node
-def arithmetic_llm(state: MessagesState):
-    return {"messages": [llm_with_tools.invoke([sys_message] + state["messages"])]}
+workflow.add_edge(START, "conversation")
+workflow.add_conditional_edges("conversation", should_continue_conversation)
+workflow.add_edge("summarize_conversation", END)
 
-# ============ Build graph ============
-
-builder = StateGraph(MessagesState)
-builder.add_node("arithmetic_llm", arithmetic_llm)
-builder.add_node("tools", ToolNode(tools=tools))
-builder.add_edge(START, "arithmetic_llm")
-builder.add_conditional_edges(
-    "arithmetic_llm",
-    # If the latest message (result) from assistant is a tool call -> tools_condition routes to tools
-    # If the latest message (result) from assistant is a not a tool call -> tools_condition routes to END
-    tools_condition,
-)
-builder.add_edge("tools", "arithmetic_llm")
-
-# ============ Compile graph ============
 ensure_database()
 ensure_schema()
 PG_URI = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?sslmode=disable"
 with PostgresSaver.from_conn_string(PG_URI) as memory:
     if is_running_in_studio():
-        graph = builder.compile() # checkpointer=memory
+        graph = workflow.compile() # checkpointer in Studio
+
     else:
-        graph = builder.compile(checkpointer=memory)
-# Invoke graph with specified thread
-    config = {"configurable": {"thread_id": "1"}, "callbacks": [langfuse_handler]}
+        graph = workflow.compile(checkpointer=memory)
+        graph_png = graph.get_graph(xray=True).draw_mermaid_png()
+        with open("summarizing_bot_with_memory_schema.png", "wb") as f:
+            f.write(graph_png)
+        config = {"configurable": {"thread_id": USER_THREAD}, 
+                  "callbacks": [langfuse_handler],
+                  "metadata": {"langfuse_session_id": USER_THREAD,}}
+        while True:
+            user_input = input("You: ")
+            if user_input.lower() in {"exit", "quit"}:
+                break
 
-    messages = [HumanMessage(content="Add 11 and 4.")]
-    messages = graph.invoke({"messages": messages}, config) 
-
-    messages = [HumanMessage(content="Multiply that by 2.")]
-    messages = graph.invoke({"messages": messages}, config) 
-
-
-for mes in messages["messages"]:
-    mes.pretty_print()
+            output = graph.invoke({"messages": [HumanMessage(content=user_input)]}, config=config)
+            print("Bot:", output["messages"][-1].content) 

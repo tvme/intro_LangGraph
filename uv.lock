@@ -549,7 +549,7 @@ requires-dist = [
     { name = "langchain-openai" },
     { name = "langchain-tavily", specifier = ">=0.2.11" },
     { name = "langfuse", specifier = ">=3.3.0" },
-    { name = "langgraph" },
+    { name = "langgraph", extras = ["graphviz"] },
     { name = "langgraph-checkpoint-postgres", specifier = ">=2.0.23" },
     { name = "langgraph-checkpoint-sqlite" },
     { name = "langgraph-cli", extras = ["inmem"] },

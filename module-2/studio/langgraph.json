@@ -1,7 +1,7 @@
 {
   "dockerfile_lines": [],
   "graphs": {
-    "chatbot": "./chatbot.py:graph"
+    "chatbot": "./summarizing_bot_with_memory.py:graph"
   },
   "env": "./.env",
   "python_version": "3.11",

@@ -5,7 +5,7 @@ description = "LangGraph Academia: Introduction to LangGraph"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "langgraph",
+    "langgraph[graphviz]",
     "langgraph-prebuilt",
     "langgraph-sdk",
     "langgraph-checkpoint-sqlite",
